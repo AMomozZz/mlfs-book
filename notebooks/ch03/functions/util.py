@@ -31,7 +31,7 @@ def get_historical_weather(city, start_date,  end_date, latitude, longitude):
         "longitude": longitude,
         "start_date": start_date,
         "end_date": end_date,
-        "daily": ["temperature_2m_mean", "precipitation_sum", "wind_speed_10m_max", "wind_direction_10m_dominant"]
+        "daily": ["temperature_2m_mean", "precipitation_sum", "wind_speed_10m_max", "wind_direction_10m_dominant", "rain_sum"]
     }
     responses = openmeteo.weather_api(url, params=params)
 
@@ -48,6 +48,7 @@ def get_historical_weather(city, start_date,  end_date, latitude, longitude):
     daily_precipitation_sum = daily.Variables(1).ValuesAsNumpy()
     daily_wind_speed_10m_max = daily.Variables(2).ValuesAsNumpy()
     daily_wind_direction_10m_dominant = daily.Variables(3).ValuesAsNumpy()
+    daily_rain_sum = daily.Variables(4).ValuesAsNumpy()
 
     daily_data = {"date": pd.date_range(
         start = pd.to_datetime(daily.Time(), unit = "s"),
@@ -59,6 +60,7 @@ def get_historical_weather(city, start_date,  end_date, latitude, longitude):
     daily_data["precipitation_sum"] = daily_precipitation_sum
     daily_data["wind_speed_10m_max"] = daily_wind_speed_10m_max
     daily_data["wind_direction_10m_dominant"] = daily_wind_direction_10m_dominant
+    daily_data["rain_sum"] = daily_rain_sum
 
     daily_dataframe = pd.DataFrame(data = daily_data)
     daily_dataframe = daily_dataframe.dropna()
