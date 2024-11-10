@@ -5,6 +5,7 @@ import requests
 import pandas as pd
 import json
 from geopy.geocoders import Nominatim
+from geopy.exc import GeocoderUnavailable
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 from matplotlib.ticker import MultipleLocator
@@ -117,18 +118,28 @@ def get_hourly_weather_forecast(city, latitude, longitude):
 
 
 
-def get_city_coordinates(city_name: str):
+def get_city_coordinates(city_name: str, retries: int = 3, delay: int = 2):
     """
     Takes city name and returns its latitude and longitude (rounded to 2 digits after dot).
     """
     # Initialize Nominatim API (for getting lat and long of the city)
     geolocator = Nominatim(user_agent="MyApp")
-    city = geolocator.geocode(city_name)
 
-    latitude = round(city.latitude, 2)
-    longitude = round(city.longitude, 2)
-
-    return latitude, longitude
+    for attempt in range(retries):
+        try:
+            city = geolocator.geocode(city_name)
+            if city:
+                latitude = round(city.latitude, 2)
+                longitude = round(city.longitude, 2)
+                return latitude, longitude
+            else:
+                print(f"City '{city_name}' not found.")
+                return None, None
+        except GeocoderUnavailable:
+            print(f"Attempt {attempt + 1} failed, retrying in {delay} seconds...")
+            time.sleep(delay)
+    
+    raise Exception("Geocoding service unavailable after several attempts")
 
 def trigger_request(url:str):
     response = requests.get(url)
