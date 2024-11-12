@@ -5,6 +5,7 @@ import requests
 import pandas as pd
 import json
 from geopy.geocoders import Nominatim
+from geopy.exc import GeocoderUnavailable
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 from matplotlib.ticker import MultipleLocator
@@ -114,20 +115,79 @@ def get_hourly_weather_forecast(city, latitude, longitude):
     hourly_dataframe = hourly_dataframe.dropna()
     return hourly_dataframe
 
+def get_yesterday_weather_forecast(city, latitude, longitude):
 
+    # latitude, longitude = get_city_coordinates(city)
 
-def get_city_coordinates(city_name: str):
+    # Setup the Open-Meteo API client with cache and retry on error
+    cache_session = requests_cache.CachedSession('.cache', expire_after = 3600)
+    retry_session = retry(cache_session, retries = 5, backoff_factor = 0.2)
+    openmeteo = openmeteo_requests.Client(session = retry_session)
+
+    # Make sure all required weather variables are listed here
+    # The order of variables in hourly or daily is important to assign them correctly below
+    url = "https://api.open-meteo.com/v1/ecmwf"
+    params = {
+        "latitude": latitude,
+        "longitude": longitude,
+        "past_days": 1,
+        "forecast_days": 1,
+        "hourly": ["temperature_2m", "precipitation", "wind_speed_10m", "wind_direction_10m"]
+    }
+    responses = openmeteo.weather_api(url, params=params)
+
+    # Process first location. Add a for-loop for multiple locations or weather models
+    response = responses[0]
+    # print(f"Coordinates {response.Latitude()}°N {response.Longitude()}°E")
+    # print(f"Elevation {response.Elevation()} m asl")
+    # print(f"Timezone {response.Timezone()} {response.TimezoneAbbreviation()}")
+    # print(f"Timezone difference to GMT+0 {response.UtcOffsetSeconds()} s")
+
+    # Process hourly data. The order of variables needs to be the same as requested.
+
+    hourly = response.Hourly()
+    hourly_temperature_2m = hourly.Variables(0).ValuesAsNumpy()
+    hourly_precipitation = hourly.Variables(1).ValuesAsNumpy()
+    hourly_wind_speed_10m = hourly.Variables(2).ValuesAsNumpy()
+    hourly_wind_direction_10m = hourly.Variables(3).ValuesAsNumpy()
+
+    hourly_data = {"date": pd.date_range(
+        start = pd.to_datetime(hourly.Time(), unit = "s"),
+        end = pd.to_datetime(hourly.TimeEnd(), unit = "s"),
+        freq = pd.Timedelta(seconds = hourly.Interval()),
+        inclusive = "left"
+    )}
+    hourly_data["temperature_2m_mean"] = hourly_temperature_2m
+    hourly_data["precipitation_sum"] = hourly_precipitation
+    hourly_data["wind_speed_10m_max"] = hourly_wind_speed_10m
+    hourly_data["wind_direction_10m_dominant"] = hourly_wind_direction_10m
+
+    hourly_dataframe = pd.DataFrame(data = hourly_data)
+    hourly_dataframe = hourly_dataframe.dropna()
+    return hourly_dataframe
+
+def get_city_coordinates(city_name: str, retries: int = 3, delay: int = 2):
     """
     Takes city name and returns its latitude and longitude (rounded to 2 digits after dot).
     """
     # Initialize Nominatim API (for getting lat and long of the city)
     geolocator = Nominatim(user_agent="MyApp")
-    city = geolocator.geocode(city_name)
 
-    latitude = round(city.latitude, 2)
-    longitude = round(city.longitude, 2)
-
-    return latitude, longitude
+    for attempt in range(retries):
+        try:
+            city = geolocator.geocode(city_name)
+            if city:
+                latitude = round(city.latitude, 2)
+                longitude = round(city.longitude, 2)
+                return latitude, longitude
+            else:
+                print(f"City '{city_name}' not found.")
+                return None, None
+        except GeocoderUnavailable:
+            print(f"Attempt {attempt + 1} failed, retrying in {delay} seconds...")
+            time.sleep(delay)
+    
+    raise Exception("Geocoding service unavailable after several attempts")
 
 def trigger_request(url:str):
     response = requests.get(url)
@@ -296,10 +356,14 @@ def check_file_path(file_path):
         print(f"File successfully found at the path: {file_path}")
 
 def backfill_predictions_for_monitoring(weather_fg, air_quality_df, monitor_fg, model):
+    l = []
+    for i in weather_fg.features:
+        if i.name != 'date' and i.name != 'city':
+            l.append(i.name)
     features_df = weather_fg.read()
     features_df = features_df.sort_values(by=['date'], ascending=True)
     features_df = features_df.tail(10)
-    features_df['predicted_pm25'] = model.predict(features_df[['temperature_2m_mean', 'precipitation_sum', 'wind_speed_10m_max', 'wind_direction_10m_dominant', 'pm25_yesterday']])
+    features_df['predicted_pm25'] = model.predict(features_df[l])
     df = pd.merge(features_df, air_quality_df[['date','pm25','street','country']], on="date")
     df['days_before_forecast_day'] = 1
     hindcast_df = df
