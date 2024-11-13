@@ -355,18 +355,24 @@ def check_file_path(file_path):
     else:
         print(f"File successfully found at the path: {file_path}")
 
-def backfill_predictions_for_monitoring(weather_fg, air_quality_df, monitor_fg, model):
-    l = []
+def backfill_predictions_for_monitoring(weather_fg, air_quality_df, model1, model2):
+    l1 = []
     for i in weather_fg.features:
-        if i.name != 'date' and i.name != 'city':
-            l.append(i.name)
+        if i.name != 'date' and i.name != 'city' and i.name != 'pm25_21':
+            l1.append(i.name)
+    l2 = []
+    for i in weather_fg.features:
+        if i.name != 'date' and i.name != 'city' and i.name != 'pm25_1':
+            l2.append(i.name)
     features_df = weather_fg.read()
     features_df = features_df.sort_values(by=['date'], ascending=True)
     features_df = features_df.tail(10)
-    features_df['predicted_pm25'] = model.predict(features_df[l])
+    features_df['predicted_pm25_1'] = model1.predict(features_df[l1])
+    features_df['predicted_pm25_2'] = model2.predict(features_df[l2])
+
     df = pd.merge(features_df, air_quality_df[['date','pm25','street','country']], on="date")
     df['days_before_forecast_day'] = 1
     hindcast_df = df
     df = df.drop('pm25', axis=1)
-    monitor_fg.insert(df, write_options={"wait_for_job": True})
+    # monitor_fg.insert(df, write_options={"wait_for_job": True})
     return hindcast_df
