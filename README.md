@@ -6,7 +6,7 @@ This project is based on the O'Reilly book "Building Machine Learning Systems wi
 
 Explore the dashboards for example ML systems [here](https://amomozzz.github.io/mlfs-book/).
 
-For air quality prediction, you can find another example. The predictions use the average value of the two models [here](https://amomozzz.github.io/mlfs-book_2model/).
+For air quality prediction, you can find another example. The predictions use the average value of the two models [here](https://github.com/AMomozZz/mlfs-book_2model).
 
 ## Course Comparison
 
